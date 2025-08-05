@@ -1,3 +1,4 @@
+--This is a test comment
 -- 确保在 financial_db 数据库下执行
 use financial_db;
 -- ----------------------------
