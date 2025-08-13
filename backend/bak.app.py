@@ -26,8 +26,6 @@ def show_accounts_page():
         cursor.close()
         conn.close()
 
-# --- API 路由 ---
-
 # --- Read: 获取所有会计科目 ---
 @app.route("/api/accounts", methods=['GET'])
 def get_accounts_api():
@@ -41,28 +39,6 @@ def get_accounts_api():
         cursor.execute("SELECT * FROM chart_of_accounts ORDER BY account_code;")
         accounts = cursor.fetchall()
         return jsonify(accounts)
-    except Exception as e:
-        return jsonify({"error": f"查询失败: {e}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# --- Read: 获取单个会计科目 ---
-@app.route("/api/accounts/<string:account_code>", methods=['GET'])
-def get_single_account_api(account_code):
-    """获取单个会计科目的API接口"""
-    conn = get_db_connection()
-    if conn is None:
-        return jsonify({"error": "数据库连接失败"}), 500
-    
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT * FROM chart_of_accounts WHERE account_code = %s;", (account_code,))
-        account = cursor.fetchone()
-        if account:
-            return jsonify(account)
-        else:
-            return jsonify({"error": "未找到该科目"}), 404
     except Exception as e:
         return jsonify({"error": f"查询失败: {e}"}), 500
     finally:
@@ -101,56 +77,6 @@ def create_account_api():
         cursor.close()
         conn.close()
 
-# --- Update: 修改一个会计科目 (最终修正版) ---
-@app.route("/api/accounts/<string:account_code>", methods=['PUT'])
-def update_account_api(account_code):
-    """修改一个会计科目"""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "请求体中没有提供数据"}), 400
-
-    # 准备要更新的字段和值
-    fields_to_update = []
-    values = []
-
-    if 'account_name' in data:
-        fields_to_update.append("account_name = %s")
-        values.append(data['account_name'])
-    
-    if 'balance_direction' in data:
-        fields_to_update.append("balance_direction = %s")
-        values.append(data['balance_direction'])
-
-    if not fields_to_update:
-        return jsonify({"error": "没有提供可更新的字段"}), 400
-
-    values.append(account_code) # 将 account_code 添加到值的末尾用于 WHERE 子句
-
-    conn = get_db_connection()
-    if conn is None:
-        return jsonify({"error": "数据库连接失败"}), 500
-    
-    cursor = conn.cursor()
-    try:
-        # 动态构建 SQL 语句
-        sql = f"UPDATE chart_of_accounts SET {', '.join(fields_to_update)} WHERE account_code = %s"
-        
-        cursor.execute(sql, tuple(values))
-        conn.commit()
-        
-        if cursor.rowcount > 0:
-            return jsonify({"message": "会计科目更新成功"})
-        else:
-            # 这种情况可能是因为提交的数据和数据库中完全一样，没有实际更新
-            # 但我们仍然认为这是一个成功的操作
-            return jsonify({"message": "会计科目更新成功 (数据无变化)"})
-
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": f"更新失败: {e}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 # --- Delete: 删除一个会计科目 ---
 @app.route("/api/accounts/<string:account_code>", methods=['DELETE'])
@@ -171,6 +97,69 @@ def delete_account_api(account_code):
     except Exception as e:
         conn.rollback()
         return jsonify({"error": f"删除失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# backend/app.py
+
+# --- Read: 获取单个会计科目 ---
+@app.route("/api/accounts/<string:account_code>", methods=['GET'])
+def get_single_account_api(account_code):
+    """获取单个会计科目的API接口"""
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM chart_of_accounts WHERE account_code = %s;", (account_code,))
+        account = cursor.fetchone() # 使用 fetchone() 获取单条记录
+        if account:
+            return jsonify(account)
+        else:
+            return jsonify({"error": "未找到该科目"}), 404
+    except Exception as e:
+        return jsonify({"error": f"查询失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- Update: 修改一个会计科目 (修正版) ---
+@app.route("/api/accounts/<string:account_code>", methods=['PUT'])
+def update_account_api(account_code):
+    """修改一个会计科目"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "请求体中没有提供数据"}), 400
+
+    new_name = data.get('account_name')
+    if not new_name:
+        return jsonify({"error": "缺少 account_name 字段"}), 400
+
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor()
+    try:
+        # 先检查科目是否存在
+        cursor.execute("SELECT 1 FROM chart_of_accounts WHERE account_code = %s", (account_code,))
+        if cursor.fetchone() is None:
+            return jsonify({"error": "未找到该科目"}), 404
+
+        # 再执行更新
+        sql = "UPDATE chart_of_accounts SET account_name = %s WHERE account_code = %s"
+        cursor.execute(sql, (new_name, account_code))
+        conn.commit()
+        
+        # 只要没有异常，就返回成功
+        return jsonify({"message": "会计科目更新成功"})
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": f"更新失败: {e}"}), 500
     finally:
         cursor.close()
         conn.close()
