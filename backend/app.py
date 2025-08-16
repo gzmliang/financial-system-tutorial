@@ -175,6 +175,160 @@ def delete_account_api(account_code):
         cursor.close()
         conn.close()
 
+# --- 页面渲染路由 ---
+@app.route("/reports")
+def show_reports_page():
+    """渲染财务报表页面"""
+    return render_template('reports.html')
+
+# --- API 路由 ---
+
+# 1. 触发汇总计算的API
+@app.route("/api/reports/generate_summary", methods=['POST'])
+def generate_summary_api():
+    """调用存储过程，计算指定年度的科目汇总数据"""
+    data = request.get_json()
+    year = data.get('year')
+    if not year:
+        return jsonify({"error": "必须提供年份"}), 400
+    
+    conn = get_db_connection()
+    if conn is None: return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor()
+    try:
+        cursor.callproc('proc_generate_account_summary', (year,))
+        conn.commit()
+        return jsonify({"message": f"{year}年度科目汇总数据已生成"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": f"汇总计算失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 2. 获取科目汇总表的API
+@app.route("/api/reports/account_summary", methods=['GET'])
+def get_account_summary_api():
+    """获取指定年度的科目汇总表数据"""
+    year = request.args.get('year', type=int)
+    if not year:
+        return jsonify({"error": "必须提供年份参数"}), 400
+
+    conn = get_db_connection()
+    if conn is None: return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 联结科目定义表以获取科目名称
+        sql = """
+            SELECT 
+                ab.account_code,
+                coa.account_name,
+                ab.opening_balance,
+                ab.period_debit,
+                ab.period_credit,
+                ab.closing_balance
+            FROM account_balances ab
+            JOIN chart_of_accounts coa ON ab.account_code = coa.account_code
+            WHERE ab.fiscal_year = %s
+            ORDER BY ab.account_code;
+        """
+        cursor.execute(sql, (year,))
+        summary_data = cursor.fetchall()
+        return jsonify(summary_data)
+    except Exception as e:
+        return jsonify({"error": f"获取科目汇总表失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+# 3. 获取资产负债表的API
+@app.route("/api/reports/balance_sheet", methods=['GET'])
+def get_balance_sheet_api():
+    """获取资产负债表数据"""
+    year = request.args.get('year', type=int)
+    if not year:
+        return jsonify({"error": "必须提供年份参数"}), 400
+
+    conn = get_db_connection()
+    if conn is None: return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc('proc_generate_balance_sheet', (year,))
+        # 存储过程执行后，数据已在 balance_sheet_report 表中，直接查询即可
+        cursor.execute("SELECT * FROM balance_sheet_report ORDER BY line_index;")
+        report_data = cursor.fetchall()
+        return jsonify(report_data)
+    except Exception as e:
+        return jsonify({"error": f"获取报表失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+# 4. 获取利润表的API
+@app.route("/api/reports/income_statement", methods=['GET'])
+def get_income_statement_api():
+    """获取利润表数据"""
+    year = request.args.get('year', type=int)
+    if not year:
+        return jsonify({"error": "必须提供年份参数"}), 400
+        
+    conn = get_db_connection()
+    if conn is None: return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc('proc_generate_income_statement', (year,))
+        cursor.execute("SELECT * FROM income_statement_report ORDER BY line_index;")
+        report_data = cursor.fetchall()
+        return jsonify(report_data)
+    except Exception as e:
+        return jsonify({"error": f"获取报表失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 3. 获取现金流量表的API (已修正)
+@app.route("/api/reports/cash_flow_statement", methods=['GET'])
+def get_cash_flow_statement_api():
+    """获取现金流量表数据"""
+    year = request.args.get('year', type=int)
+    if not year:
+        return jsonify({"error": "必须提供年份参数"}), 400
+
+    conn = get_db_connection()
+    if conn is None: return jsonify({"error": "数据库连接失败"}), 500
+    
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 步骤1：调用存储过程生成最新数据
+        cursor.callproc('proc_generate_cash_flow_statement', (year,))
+        
+        # 步骤2：查询生成的结果，但只选择我们需要的字段
+        cursor.execute("SELECT item, current_period_amount FROM cash_flow_statement_report ORDER BY line_index;")
+        report_data = cursor.fetchall()
+
+        # <<< 核心修改在这里 >>>
+        # 步骤3：手动构建符合前端JS要求的JSON结构
+        # 我们将数据库中的 'current_period_amount' 改名为 'amount' 再发给前端
+        results = []
+        for row in report_data:
+            results.append({
+                'item': row['item'],
+                'amount': row['current_period_amount'] # 将key重命名为'amount'
+            })
+        
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": f"获取报表失败: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 
