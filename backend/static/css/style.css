@@ -117,3 +117,8 @@ th {
     box-sizing: border-box;
 }
 
+.btn-disabled {
+    background-color: #ccc !important;
+    cursor: not-allowed !important;
+    border-color: #ccc !important;
+}

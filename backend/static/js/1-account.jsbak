@@ -1,4 +1,4 @@
-// backend/static/js/accounts.js (最终修正版 - 完整功能)
+// backend/static/js/accounts.js (最终修正版)
 $(document).ready(function() {
 
     // --- 全局变量和常量 ---
@@ -10,36 +10,30 @@ $(document).ready(function() {
     const $modalTitle = $('#modal-title');
     const $fiscalYearInput = $('#fiscal-year');
     const $balanceStatus = $('#balance-status');
-    const $btnSaveBalances = $('#btn-save-balances'); // 获取保存按钮
 
-    // --- 功能1: 加载并显示所有会计科目 (集成权限控制) ---
+    // --- 功能1: 加载并显示所有会计科目与期初余额 ---
     function loadAccounts() {
         const year = $fiscalYearInput.val();
-        if (!year) { return; }
+        if (!year) {
+            // 页面刚加载时，年份输入框可能有默认值但未触发change，这里给个默认值
+            const currentYear = new Date().getFullYear();
+            $fiscalYearInput.val(currentYear);
+            loadAccounts(); // 重新调用
+            return;
+        }
         
         const accountsRequest = $.ajax({ url: API_ACCOUNTS_URL, type: 'GET' });
         const balancesRequest = $.ajax({ url: `${API_BALANCES_URL}?year=${year}`, type: 'GET' });
 
+        // 当两个请求都成功后，再渲染表格
         $.when(accountsRequest, balancesRequest).done(function(accountsResponse, balancesResponse) {
             const accounts = accountsResponse[0];
-            const balanceData = balancesResponse[0];
-            const currentBalances = balanceData.balances;
-            const isInitialYear = balanceData.is_initial_year;
-
-            // 步骤A: 根据is_initial_year标志，控制整个编辑功能的状态
-            if (isInitialYear) {
-                $btnSaveBalances.prop('disabled', false).removeClass('btn-disabled');
-                $balanceStatus.text('提示：当前为初始年份，期初余额可编辑。').css('color', 'blue').show();
-            } else {
-                $btnSaveBalances.prop('disabled', true).addClass('btn-disabled');
-                $balanceStatus.text('提示：非初始年份，期初余额由上年结转，不可编辑。').css('color', 'orange').show();
-            }
-            
+            const balancesMap = balancesResponse[0];
             $tableBody.empty();
             if (accounts && Array.isArray(accounts)) {
                 accounts.forEach(function(account) {
-                    const openingBalance = currentBalances[account.account_code] || 0.00;
-                    const isReadOnly = isInitialYear ? '' : 'readonly';
+                    // 从转换后的 balancesMap 中安全地获取余额
+                    const openingBalance = balancesMap[account.account_code] || 0.00;
 
                     const row = `
                         <tr data-code="${account.account_code}">
@@ -48,7 +42,7 @@ $(document).ready(function() {
                             <td>${account.balance_direction === 'debit' ? '借' : '贷'}</td>
                             <td>${account.level || ''}</td>
                             <td>
-                                <input type="number" class="opening-balance-input" value="${parseFloat(openingBalance).toFixed(2)}" step="0.01" style="width: 100%;" ${isReadOnly}>
+                                <input type.phpe="number" class="opening-balance-input" value="${parseFloat(openingBalance).toFixed(2)}" step="0.01" style="width: 100%;">
                             </td>
                             <td>
                                 <button class="btn btn-edit" data-code="${account.account_code}">编辑</button>
@@ -59,31 +53,36 @@ $(document).ready(function() {
                     $tableBody.append(row);
                 });
             }
-        }).fail(function() {
-            alert("加载会计科目或期初余额失败！");
+        }).fail(function(xhr, status, error) {
+            console.error("加载失败:", status, error);
+            console.error("服务器响应:", xhr.responseText);
+            alert("加载会计科目或期初余额失败！请检查浏览器控制台获取详细错误信息。");
         });
     }
 
     // --- 功能2: 会计年度改变时，重新加载数据 ---
     $fiscalYearInput.on('change', function() {
-        $balanceStatus.text('').hide();
+        $balanceStatus.text('').hide(); // 清空并隐藏状态提示
         loadAccounts();
     });
 
-    // --- 功能3: 保存期初余额 (增加前端校验) ---
-    $btnSaveBalances.on('click', function() {
-        if ($(this).prop('disabled')) {
-            alert('错误：非初始年份的期初余额不可修改！');
+    // --- 功能3: 保存期初余额 ---
+    $('#btn-save-balances').on('click', function() {
+        const year = $fiscalYearInput.val();
+        if (!year) {
+            alert('请输入有效的会计年度！');
             return;
         }
-        
-        const year = $fiscalYearInput.val();
+
         let balancesToSave = [];
         $tableBody.find('tr').each(function() {
             const $row = $(this);
+            const accountCode = $row.data('code');
+            const balance = $row.find('.opening-balance-input').val();
+            
             balancesToSave.push({
-                account_code: $row.data('code'),
-                balance: parseFloat($row.find('.opening-balance-input').val()) || 0
+                account_code: accountCode,
+                balance: parseFloat(balance) || 0
             });
         });
 
@@ -91,9 +90,12 @@ $(document).ready(function() {
             url: API_BALANCES_URL,
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ year: parseInt(year), balances: balancesToSave }),
+            data: JSON.stringify({
+                year: parseInt(year),
+                balances: balancesToSave
+            }),
             success: function(response) {
-                $balanceStatus.text(response.message).css('color', 'green').fadeIn().delay(3000).fadeOut();
+                $balanceStatus.text(response.message).fadeIn().delay(3000).fadeOut();
             },
             error: function(xhr) {
                 alert('保存失败: ' + (xhr.responseJSON ? xhr.responseJSON.error : '未知错误'));
@@ -101,7 +103,7 @@ $(document).ready(function() {
         });
     });
 
-    // --- 功能4: 科目CRUD (保持您原有的完整功能) ---
+    // --- 功能4: 科目CRUD (Create, Read, Update, Delete) ---
 
     // 打开新增弹窗
     $('#btn-add-account').on('click', function() {
@@ -122,6 +124,7 @@ $(document).ready(function() {
         
         const accountCode = $('#account-code').val();
         const isUpdate = $('#account-code').prop('readonly');
+
         const url = isUpdate ? `${API_ACCOUNTS_URL}/${accountCode}` : API_ACCOUNTS_URL;
         const method = isUpdate ? 'PUT' : 'POST';
 
@@ -141,7 +144,7 @@ $(document).ready(function() {
             success: function(response) {
                 alert(response.message);
                 $modal.hide();
-                loadAccounts();
+                loadAccounts(); // 操作成功后刷新整个列表
             },
             error: function(xhr) {
                 alert('操作失败！' + (xhr.responseJSON ? xhr.responseJSON.error : ''));
@@ -149,9 +152,10 @@ $(document).ready(function() {
         });
     });
 
-    // 使用事件委托处理动态生成的“编辑”和“删除”按钮
+    // 使用事件委托来处理动态生成的“编辑”和“删除”按钮
     $tableBody.on('click', '.btn-edit', function() {
         const accountCode = $(this).data('code');
+        
         $.ajax({
             url: `${API_ACCOUNTS_URL}/${accountCode}`,
             type: 'GET',
@@ -176,7 +180,7 @@ $(document).ready(function() {
                 type: 'DELETE',
                 success: function(response) {
                     alert(response.message);
-                    loadAccounts();
+                    loadAccounts(); // 操作成功后刷新整个列表
                 },
                 error: function(xhr) {
                     alert('删除失败: ' + (xhr.responseJSON ? xhr.responseJSON.error : '未知错误'));
@@ -188,4 +192,3 @@ $(document).ready(function() {
     // --- 页面初始加载 ---
     loadAccounts();
 });
-

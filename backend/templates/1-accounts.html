@@ -1,19 +1,11 @@
-<!-- backend/templates/accounts.html (升级版) -->
+<!-- backend/templates/accounts.html -->
 {% extends "layout.html" %}
 {% block title %}会计科目管理{% endblock %}
 
 {% block content %}
-    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div class="page-header">
         <h2>会计科目管理</h2>
         <button id="btn-add-account" class="btn btn-primary">新增科目</button>
-    </div>
-
-    <!-- 新增的期初余额控制区域 -->
-    <div class="balance-controls" style="background-color: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
-        <label for="fiscal-year" style="font-weight: bold;">会计年度:</label>
-        <input type="number" id="fiscal-year" value="2025" style="width: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-        <button id="btn-save-balances" class="btn btn-primary">保存期初余额</button>
-        <span id="balance-status" style="color: green; font-weight: bold;"></span>
     </div>
 
     <table id="accounts-table">
@@ -23,8 +15,6 @@
                 <th>科目名称</th>
                 <th>余额方向</th>
                 <th>科目级别</th>
-                <!-- 新增的列 -->
-                <th style="width: 150px;">期初余额</th>
                 <th>操作</th>
             </tr>
         </thead>
@@ -60,12 +50,10 @@
                 </div>
             </form>
         </div>
-
     </div>
 {% endblock %}
 
 {% block scripts %}
-    <!-- 确保引用的是升级后的JS文件 -->
     <script src="{{ url_for('static', filename='js/accounts.js') }}"></script>
 {% endblock %}
 
