@@ -153,7 +153,7 @@ $(document).ready(function() {
         });
     });
 
-    // --- 【关键修正】新增：获取并显示试算平衡表 ---
+    // --- 新增：获取并显示试算平衡表 ---
     $('#btn-get-tb').on('click', function() {
         const year = $yearInput.val();
         if (!year) {

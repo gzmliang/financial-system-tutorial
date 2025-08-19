@@ -122,3 +122,10 @@ th {
     cursor: not-allowed !important;
     border-color: #ccc !important;
 }
+
+/* backend/static/css/style.css (在末尾追加) */
+.parent-balance-input {
+    background-color: #f2f2f2; /* 灰色背景 */
+    font-weight: bold;
+    border: none;
+}
