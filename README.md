@@ -1,5 +1,5 @@
-# Python+MySQL全栈开发
-这是一个为《Python+MySQL 全栈开发实战（微课版）》教材配套的开源项目。
+# Python+MySQL全栈开发实战
+这是一个为《Python+MySQL全栈开发实战（微课版）》教材配套的开源项目。
 
 ## 项目简介
 
